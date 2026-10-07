@@ -1,0 +1,662 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex">
+<title>Birthday Film 2077</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Orbitron:wght@500;700;900&family=Rajdhani:wght@500;600;700&family=Share+Tech+Mono&display=swap">
+<style>
+/* Layout: a heads-up display in three greens. Wide squared type, facts in
+   clipped-corner cells, live readouts along the bottom edge; the title screen
+   scrolls straight into a pinned screening room where a scan line swaps the
+   words for the film. */
+:root {
+  /* colour: the film's green tritone, with one loud accent */
+  --ground: #0e2b1f;    /* Pine: the page */
+  --mid: #27704a;       /* Fern: bars, cells, the note panel */
+  --mid-ink: #ddf0c2;   /* text on Fern */
+  --ink: #ddf0c2;       /* Pistachio: text */
+  --accent: #fcee0a;    /* Signal yellow: edges and on-states only */
+  --alert: #ff5a4f;     /* a red sliver in the glitch, and the focus ring */
+  --stage: #050506;
+  --stage-ink: #f4f6f7;
+  --rule: color-mix(in srgb, var(--ink) 45%, transparent);
+  --scan: color-mix(in srgb, var(--ink) 6%, transparent);
+  /* type: display for the big words, ui for labels and the note, mono for readouts */
+  --display: "Orbitron", "Eurostile", "Arial Black", sans-serif;
+  --ui: "Rajdhani", "DIN Alternate", "Arial Narrow", sans-serif;
+  --mono: "Share Tech Mono", ui-monospace, "SF Mono", Menlo, monospace;
+  /* layout and motion */
+  --gutter: clamp(16px, 2.6vw, 40px);
+  --cut: 12px;         /* size of the clipped corner on buttons and cells */
+  --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --film-fit: cover;   /* cover fills the screen and crops the edges a little; contain shows every pixel */
+  color-scheme: dark;
+}
+/* The other moods. To change the default, copy one of these up into :root. */
+:root[data-mood="signal"] { --ground: #fcee0a; --mid: #0b0b0c; --mid-ink: #fcee0a; --ink: #0b0b0c; --accent: #00e1f5; --alert: #ff2e4c; color-scheme: light; }
+:root[data-mood="hud"]    { --ground: #07090d; --mid: #e6fbff; --mid-ink: #07090d; --ink: #e6fbff; --accent: #00e1f5; --alert: #ff2e4c; }
+
+*, *::before, *::after { box-sizing: border-box; }
+[hidden] { display: none !important; }
+body {
+  margin: 0;
+  background: var(--ground);
+  color: var(--ink);
+  font: 600 15px/1.35 var(--ui);
+  overflow-x: clip;
+  -webkit-font-smoothing: antialiased;
+}
+p, h1, h2, h3, dl, dd { margin: 0; }
+button {
+  font: inherit; color: inherit; letter-spacing: inherit; text-transform: inherit;
+  background: none; border: 0; padding: 0; cursor: pointer;
+}
+:focus-visible { outline: 2px solid var(--alert); outline-offset: 3px; }
+
+.label { font: 700 13px/1.2 var(--ui); text-transform: uppercase; letter-spacing: .16em; }
+.data { font: 400 13px/1.2 var(--mono); text-transform: uppercase; letter-spacing: .05em; font-variant-numeric: tabular-nums; }
+.eyebrow::before { content: "//"; margin-right: .6em; opacity: .55; }
+.slot { border-bottom: 1px dashed currentColor; opacity: .85; } /* words for you to replace */
+.phone-only { display: none !important; }
+
+/* a rectangle with its top-left and bottom-right corners clipped */
+.cut {
+  clip-path: polygon(var(--cut) 0, 100% 0, 100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%, 0 100%, 0 var(--cut));
+}
+/* faint scan lines, drawn behind the text of each section */
+.hero, .note, .stage__title {
+  background-image: repeating-linear-gradient(to bottom, transparent 0 3px, var(--scan) 3px 4px);
+}
+
+.btn {
+  display: inline-flex; align-items: center; gap: .7em;
+  background: var(--ink); color: var(--ground);
+  padding: 10px 20px 9px; white-space: nowrap;
+  transition: background-color .15s, color .15s;
+}
+.btn:hover, .btn[aria-pressed="true"] { background: var(--accent); color: var(--stage); }
+.btn:focus-visible { outline: 0; box-shadow: inset 0 0 0 2px var(--alert); } /* an outline would be clipped away */
+.btn--big { padding: 16px 30px 15px; }
+
+/* one text line that can slide up from behind its own bottom edge */
+.line { display: block; overflow: clip; padding-block: .06em; margin-block: -.06em; }
+.line > span { display: block; }
+@keyframes rise { from { transform: translateY(105%); } }
+@keyframes settle { from { opacity: 0; transform: translateY(14px); } }
+
+/* ---------- top bar ---------- */
+.bar {
+  position: fixed; inset: 0 0 auto; z-index: 10;
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 12px;
+  padding: calc(env(safe-area-inset-top, 0px) + 11px) var(--gutter) 11px;
+  background: var(--mid); color: var(--mid-ink);
+  transition: opacity .35s, color .3s;
+}
+.bar .btn { background: var(--mid-ink); color: var(--mid); }
+.bar .btn:hover, .bar .btn[aria-pressed="true"] { background: var(--accent); color: var(--stage); }
+.bar__mood { justify-self: end; }
+.bar__mood::before {
+  content: ""; display: inline-block; width: .72em; height: .72em; margin-right: .6em;
+  background: var(--accent);
+}
+.bar.is-on-film, .hud.is-on-film { color: var(--stage-ink); }
+.bar.is-on-film { background: linear-gradient(color-mix(in srgb, var(--stage) 62%, transparent), transparent); padding-bottom: 24px; }
+.bar.is-on-film .btn { background: var(--stage-ink); color: var(--stage); }
+.bar.is-on-film .btn[aria-pressed="true"] { background: var(--accent); }
+
+/* ---------- readouts along the bottom edge ---------- */
+.hud {
+  position: fixed; inset: auto 0 0; z-index: 9;
+  display: flex; gap: clamp(14px, 2.4vw, 34px);
+  padding: 9px var(--gutter) calc(env(safe-area-inset-bottom, 0px) + 8px);
+  background: var(--mid); color: var(--mid-ink);
+  transition: opacity .35s;
+}
+.hud b { font-weight: 400; }
+.hud span > b { margin-left: .5em; }
+.hud__clock { margin-left: auto; }
+.hud.is-on-film { background: linear-gradient(transparent, color-mix(in srgb, var(--stage) 62%, transparent)); }
+/* while the film plays and the pointer rests, everything on top of it gets out of the way */
+.is-idle .bar.is-on-film, .is-idle .hud.is-on-film,
+.is-idle .is-playing .stage__timecode { opacity: 0; pointer-events: none; }
+.is-idle .stage.is-playing { cursor: none; }
+
+/* ---------- hero ---------- */
+.hero {
+  position: relative; min-height: 100svh;
+  display: grid; grid-template-rows: auto 1fr auto auto; row-gap: clamp(14px, 2.6vh, 30px);
+  padding: calc(env(safe-area-inset-top, 0px) + 92px) var(--gutter) calc(env(safe-area-inset-bottom, 0px) + 62px);
+  overflow: clip;
+}
+/* four corner ticks framing the screen */
+.hero::before {
+  --t: 20px; --c: linear-gradient(var(--ink) 0 0);
+  content: ""; position: absolute; pointer-events: none;
+  inset: calc(env(safe-area-inset-top, 0px) + 72px) calc(var(--gutter) - 10px) calc(env(safe-area-inset-bottom, 0px) + 48px);
+  background:
+    var(--c) left top / var(--t) 2px, var(--c) left top / 2px var(--t),
+    var(--c) right top / var(--t) 2px, var(--c) right top / 2px var(--t),
+    var(--c) left bottom / var(--t) 2px, var(--c) left bottom / 2px var(--t),
+    var(--c) right bottom / var(--t) 2px, var(--c) right bottom / 2px var(--t);
+  background-repeat: no-repeat;
+}
+/* The lockup: a hollow greeting set exactly as wide as the solid name beneath it.
+   --size is the name's size; --k shrinks the greeting to match its width.
+   Change either line of text and --k needs retuning. */
+.hero__card { --size: min(20.4vw, 33svh); --k: .4267; align-self: center; }
+.hero__title {
+  font: 900 var(--size)/.92 var(--display);
+  text-transform: uppercase; letter-spacing: -.01em;
+}
+.hero__title .line > span { animation: rise 1.15s var(--ease-out) both; }
+.hero__title .line:nth-child(2) > span { animation-delay: .1s; }
+.hero__title .line:first-child { font-size: calc(var(--size) * var(--k)); line-height: 1.12; white-space: nowrap; }
+.hero__title .line:first-child > span { color: transparent; -webkit-text-stroke: max(1.5px, .02em) var(--ink); }
+/* the name is printed slightly out of register, and a red sliver slips now and then */
+.glitch { position: relative; display: inline-block; isolation: isolate; }
+.glitch::before, .glitch::after { content: attr(data-text); position: absolute; left: 0; top: 0; z-index: -1; }
+.glitch::before { color: var(--accent); transform: translate(.026em, .026em); }
+.glitch::after {
+  color: var(--alert); transform: translate(-.02em, 0);
+  clip-path: inset(62% 0 14% 0); animation: slip 6s steps(1) infinite;
+}
+@keyframes slip {
+  0%, 90%, 100% { transform: translate(-.02em, 0); clip-path: inset(62% 0 14% 0); }
+  91% { transform: translate(-.09em, 0);  clip-path: inset(16% 0 60% 0); }
+  93% { transform: translate(.07em, 0);   clip-path: inset(72% 0 6% 0); }
+  95% { transform: translate(-.045em, 0); clip-path: inset(40% 0 38% 0); }
+}
+.hero__data { display: grid; gap: 10px; animation: settle .9s var(--ease-out) .35s both; }
+.stripes { height: 12px; background: repeating-linear-gradient(-45deg, var(--mid) 0 9px, transparent 9px 18px); }
+.slate { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+.slate > div {
+  display: grid; align-content: start; gap: 7px; min-width: 0;
+  background: var(--mid); color: var(--mid-ink); padding: 12px 14px 11px;
+}
+.slate dt { font: 700 11px/1 var(--ui); text-transform: uppercase; letter-spacing: .18em; opacity: .78; }
+.slate dd { font: 400 15px/1.15 var(--mono); text-transform: uppercase; overflow-wrap: anywhere; }
+.hero__foot { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 12px 16px; }
+.hero__cue::after { content: " \2193"; }
+.hero__sound { display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 12px 18px; }
+/* a five-bar meter that only moves when the sound is on */
+.meter { display: inline-flex; align-items: end; gap: 4px; height: 26px; }
+.meter i { width: 5px; height: 22%; background: var(--ink); }
+.sound-on .meter i { background: var(--accent); animation: meter .7s ease-in-out infinite alternate; }
+.sound-on .meter i:nth-child(2) { animation-delay: -.5s; }
+.sound-on .meter i:nth-child(3) { animation-delay: -.2s; }
+.sound-on .meter i:nth-child(4) { animation-delay: -.65s; }
+.sound-on .meter i:nth-child(5) { animation-delay: -.35s; }
+@keyframes meter { from { height: 18%; } to { height: 100%; } }
+.handoff { width: 100%; }
+.handoff p { max-width: 30em; margin-bottom: 14px; }
+.handoff__status { margin-top: 12px; min-height: 1.35em; overflow-wrap: anywhere; }
+
+/* scroll reveal for the note: visible by default, and only waits if the script says so */
+.fade { transition: opacity .9s var(--ease-out), transform .9s var(--ease-out); }
+.fade.is-waiting { opacity: 0; transform: translateY(22px); }
+
+/* ---------- the screening room ---------- */
+/* --wipe runs 0 to 1 and is set by the script; the section's height decides how long the film stays pinned */
+.screening { --wipe: 0; position: relative; height: 340svh; border-top: 2px solid var(--mid); }
+.stage { position: sticky; top: 0; height: 100svh; overflow: clip; }
+.stage__title, .stage__film { position: absolute; inset: 0; will-change: clip-path; }
+.stage__title {
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+  column-gap: var(--gutter); padding: 0 var(--gutter);
+  clip-path: inset(0 0 calc(var(--wipe) * 100%) 0);       /* eaten from the bottom up */
+}
+.stage__title h2 {
+  font: 900 min(7vw, 30svh)/.9 var(--display);
+  text-transform: uppercase; white-space: nowrap;
+}
+.stage__title .label:not(:first-child) { justify-self: end; text-align: right; }
+.stage__film {
+  background: var(--stage); color: var(--stage-ink);
+  clip-path: inset(calc((1 - var(--wipe)) * 100%) 0 0 0); /* uncovered from the bottom up */
+}
+.stage__film video {
+  position: absolute; inset: 0; width: 100%; height: 100%;
+  object-fit: var(--film-fit);
+}
+/* the scan line riding the edge of the wipe, with a readout of how far it has got */
+.stage__edge {
+  position: absolute; left: 0; right: 0; top: calc((1 - var(--wipe)) * 100%);
+  height: 2px; background: var(--accent); opacity: 0; z-index: 3;
+}
+.stage.is-wiping .stage__edge { opacity: 1; }
+.stage__edge span {
+  position: absolute; right: var(--gutter); bottom: 8px;
+  background: var(--accent); color: var(--stage); padding: 5px 9px 4px;
+}
+.stage__empty {
+  position: absolute; inset: 0; display: grid; place-content: center; gap: 6px;
+  text-align: center; padding: var(--gutter);
+}
+.stage__timecode {
+  position: absolute; left: var(--gutter);
+  bottom: calc(env(safe-area-inset-bottom, 0px) + 46px);
+  text-shadow: 0 0 10px var(--stage), 0 0 2px var(--stage);
+  transition: opacity .35s;
+}
+.stage__end, .stage__play {
+  position: absolute; inset: 0;
+  display: grid; place-content: center; justify-items: center; gap: 18px;
+  text-align: center; padding: var(--gutter);
+}
+.stage__end { background: color-mix(in srgb, var(--stage) 72%, transparent); }
+.stage__play { width: 100%; gap: 10px; background: color-mix(in srgb, var(--stage) 45%, transparent); }
+.stage__end h3, .stage__play strong { font: 900 clamp(30px, 5.6vw, 92px)/.95 var(--display); text-transform: uppercase; }
+.stage__film .btn { background: var(--stage-ink); color: var(--stage); }
+.stage__film .btn:hover { background: var(--accent); }
+
+/* ---------- closing note ---------- */
+.note {
+  display: grid; grid-template-columns: minmax(0, 1fr); row-gap: 28px; align-content: center;
+  min-height: 100svh;
+  padding: clamp(80px, 15vh, 170px) var(--gutter) calc(clamp(80px, 15vh, 170px) + 40px);
+  border-top: 2px solid var(--mid);
+}
+.note__body {
+  --cut: 30px;
+  display: grid; gap: 24px; justify-items: start; max-width: 68rem;
+  background: var(--mid); color: var(--mid-ink);
+  padding: clamp(26px, 4.2vw, 60px);
+}
+.note__text { font: 600 clamp(22px, 2.5vw, 38px)/1.25 var(--ui); max-width: 30em; text-wrap: pretty; }
+.note__body .btn { background: var(--mid-ink); color: var(--mid); }
+.note__body .btn:hover { background: var(--accent); color: var(--stage); }
+.credits { display: grid; max-width: 68rem; border-top: 2px solid var(--mid); }
+.credits > div {
+  display: grid; grid-template-columns: 9.5em minmax(0, 1fr); gap: 12px;
+  padding: 9px 0 8px; border-bottom: 1px solid var(--rule);
+}
+.credits dt { opacity: .72; }
+
+/* ---------- phones: no pin and no wipe, just the film with a tap to play ---------- */
+@media (max-width: 640px), (max-height: 500px) and (pointer: coarse) {
+  .phone-only { display: block !important; }
+  .desk-only { display: none !important; }
+  .bar { grid-template-columns: auto 1fr; }
+  .hero { padding-top: calc(env(safe-area-inset-top, 0px) + 84px); }
+  .hero__card { --size: min(20vw, 30svh); }
+  .slate { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .screening { height: auto; padding-top: 64px; }
+  .stage { position: static; height: auto; overflow: visible; }
+  .stage__title {
+    position: static; clip-path: none;
+    grid-template-columns: minmax(0, 1fr); row-gap: 12px; padding-bottom: 24px;
+  }
+  .stage__title h2 { font-size: min(10.4vw, 34svh); }
+  .stage__title .label:not(:first-child) { justify-self: start; text-align: left; }
+  .stage__film { position: relative; inset: auto; aspect-ratio: 16 / 9; clip-path: none; }
+  .stage__film video { object-fit: contain; }
+  .stage__timecode, .stage__edge { display: none; }
+  .note { min-height: 0; row-gap: 22px; padding-block: 64px 104px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .hero__title .line > span, .hero__data, .glitch::after, .sound-on .meter i { animation: none; }
+  .fade { transition: none; }
+}
+</style>
+</head>
+<body>
+
+<header class="bar label" id="bar">
+  <p class="bar__mark desk-only eyebrow">For Tanish</p>
+  <button class="btn cut" type="button" data-sound data-off="Sound off" data-on="Sound on" aria-pressed="false">Sound off</button>
+  <button class="bar__mood" id="mood" type="button" aria-label="Change the colour mood">Mood <span id="mood-count">1/3</span></button>
+</header>
+
+<main>
+  <section class="hero" aria-labelledby="hero-title">
+    <p class="label eyebrow">A short film</p>
+    <div class="hero__card">
+      <h1 class="hero__title" id="hero-title">
+        <span class="line"><span>Happy birthday</span></span>
+        <span class="line"><span><b class="glitch" data-text="Tanish">Tanish</b></span></span>
+      </h1>
+    </div>
+    <div class="hero__data">
+      <div class="stripes" aria-hidden="true"></div>
+      <dl class="slate">
+        <div class="cut"><dt>From</dt><dd>Serene</dd></div>
+        <div class="cut"><dt>Level</dt><dd>21</dd></div>
+        <div class="cut"><dt>Runtime</dt><dd id="runtime">--:--</dd></div>
+        <div class="cut"><dt>Sound</dt><dd id="slate-sound">Off</dd></div>
+      </dl>
+    </div>
+    <div class="hero__foot">
+      <p class="hero__cue label">Scroll</p>
+      <div class="hero__sound desk-only">
+        <span class="label">This one has music</span>
+        <span class="meter" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
+        <button class="btn btn--big cut label" type="button" data-sound data-off="Turn the sound on" data-on="Sound is on" aria-pressed="false">Turn the sound on</button>
+      </div>
+      <div class="handoff phone-only">
+        <p>It was made for a bigger screen. Send it to your Mac, or turn your phone sideways and watch it here.</p>
+        <button class="btn btn--big cut label" id="share" type="button">Send to your Mac</button>
+        <p class="handoff__status data" id="share-status" role="status"></p>
+      </div>
+    </div>
+  </section>
+
+  <section class="screening" id="screening" aria-label="The film">
+    <div class="stage" id="stage">
+      <div class="stage__title">
+        <p class="label eyebrow">A short film</p>
+        <h2>Now showing</h2>
+        <p class="label desk-only">Keep scrolling</p>
+        <p class="label phone-only">Turn your phone sideways</p>
+      </div>
+      <div class="stage__film">
+        <div class="stage__empty data" id="empty">
+          <p>film.mp4 goes here</p>
+          <p>1920 &times; 1080, H.264, music baked in</p>
+        </div>
+        <!-- Your After Effects export. Keep the muted attribute: the script switches sound on after a tap. -->
+        <video id="film" src="film.mp4" playsinline muted preload="auto" aria-label="Birthday film"></video>
+        <p class="stage__timecode data" id="timecode" aria-hidden="true">00:00:00:00</p>
+        <div class="stage__end" id="end" hidden>
+          <h3>That's the film</h3>
+          <button class="btn btn--big cut label" type="button" data-replay>Watch again</button>
+          <p class="label">One more thing below</p>
+        </div>
+        <button class="stage__play" id="play" type="button" hidden>
+          <strong>Tap to play</strong>
+          <span class="label">with sound</span>
+        </button>
+      </div>
+      <div class="stage__edge" aria-hidden="true"><span class="data">Reveal <b id="edge-reveal">000</b>%</span></div>
+    </div>
+  </section>
+
+  <section class="note" aria-labelledby="note-label">
+    <p class="label eyebrow" id="note-label">One more thing</p>
+    <div class="note__body cut fade">
+      <p class="note__text"><span class="slot">[Write the sincere bit here. Two or three sentences in your own voice, nothing clever.]</span></p>
+      <p class="data">From Serene</p>
+      <button class="btn btn--big cut label" type="button" data-replay>Watch it again</button>
+    </div>
+    <dl class="credits data">
+      <div><dt>Music</dt><dd><span class="slot">[song title, artist]</span></dd></div>
+      <div><dt>Made by</dt><dd>Serene, <span class="slot">[month and year]</span></dd></div>
+    </dl>
+  </section>
+</main>
+
+<!-- Live readouts: every value here is read from the page, none of it is set dressing. -->
+<div class="hud data" id="hud" aria-hidden="true">
+  <span>Scroll<b id="hud-scroll">000</b>%</span>
+  <span class="desk-only">Reveal<b id="hud-reveal">000</b>%</span>
+  <span>Film<b id="hud-film">Standby</b></span>
+  <span class="hud__clock" id="hud-clock">00:00:00</span>
+</div>
+
+<script>
+(() => {
+  /* ---------- the four numbers worth tuning ---------- */
+  const FPS = 30;          // frame rate of your After Effects composition (only used by the timecode)
+  const START_AT = 0.9;    // how far the wipe has to be (0 to 1) before the film starts
+  const WIPE_SCREENS = 1;  // how many screens of scrolling the wipe takes
+  const SMOOTHING = 110;   // ms the wipe trails the scroll wheel; 0 follows it exactly
+
+  const root = document.documentElement;
+  const $ = (id) => document.getElementById(id);
+  const bar = $('bar'), hud = $('hud'), section = $('screening'), stage = $('stage'), film = $('film');
+  const endCard = $('end'), playBtn = $('play'), timecode = $('timecode');
+  const reduce = matchMedia('(prefers-reduced-motion: reduce)');
+  const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
+  const easeInOut = (t) => (t < 0.5 ? 2 * t * t : 1 - (-2 * t + 2) ** 2 / 2);
+  const two = (n) => String(Math.floor(n)).padStart(2, '0');
+  const three = (n) => String(Math.round(n)).padStart(3, '0');
+
+  /* ---------- sound ----------
+     Browsers refuse sound until the viewer has tapped or clicked something,
+     and scrolling does not count. Every sound button funnels through here. */
+  let soundOn = false;
+  const soundButtons = document.querySelectorAll('[data-sound]');
+  function setSound(on) {
+    soundOn = on;
+    film.muted = !on; // set inside the tap itself: iPhones only allow sound that a tap switched on
+    root.classList.toggle('sound-on', on);
+    $('slate-sound').textContent = on ? 'On' : 'Off';
+    for (const b of soundButtons) {
+      b.setAttribute('aria-pressed', String(on));
+      b.textContent = on ? b.dataset.on : b.dataset.off;
+    }
+  }
+  soundButtons.forEach((b) => b.addEventListener('click', () => setSound(!soundOn)));
+
+  /* ---------- playback ---------- */
+  let started = false; // the film has played at least once
+  async function play(restart) {
+    if (restart) film.currentTime = 0;
+    endCard.hidden = true;
+    film.muted = !soundOn;
+    try {
+      await film.play();
+    } catch (err) {
+      if (err.name === 'AbortError') return;       // a pause() got there first; nothing is wrong
+      if (!film.muted) {                           // sound was refused: play silently and say so
+        setSound(false);
+        try { await film.play(); } catch { playBtn.hidden = false; return; }
+      } else {
+        playBtn.hidden = false;                    // even silent autoplay was refused: ask for a tap
+        return;
+      }
+    }
+    started = true;
+    playBtn.hidden = true;
+  }
+
+  /* ---------- the wipe (wide screens) ----------
+     The stage is pinned by CSS (position: sticky). All the script does is turn
+     scroll position into one number, --wipe, and decide when the film runs. */
+  let pinned = false;                 // false on phones, where the film is a plain block
+  let roomTop = 0, roomBottom = 0, span = 1;
+  let target = 0, shown = 0, raf = 0, last = 0;
+  let inRoom = false;                 // the film is on screen and should be running
+  let leftBelow = false;              // we last left the room by scrolling on past it
+
+  function measure() {
+    pinned = getComputedStyle(stage).position === 'sticky';
+    const box = section.getBoundingClientRect();
+    roomTop = box.top + scrollY;
+    roomBottom = roomTop + box.height;
+    span = innerHeight * WIPE_SCREENS;
+    if (pinned) {
+      film.controls = false;
+      if (!started) playBtn.hidden = true;
+    } else {
+      inRoom = false;
+      setOnFilm(false);
+      film.controls = started;        // after the first tap, the phone's own player controls take over
+      playBtn.hidden = started;
+    }
+    onScroll();
+  }
+
+  function onScroll() {
+    const room = document.documentElement.scrollHeight - innerHeight;
+    $('hud-scroll').textContent = three(room > 0 ? clamp(scrollY / room, 0, 1) * 100 : 0);
+    if (!pinned) return;
+    target = clamp((scrollY - roomTop) / span, 0, 1);
+    if (!raf) { last = performance.now(); raf = requestAnimationFrame(tick); }
+  }
+
+  function tick(now) {
+    const dt = Math.min(now - last, 64);
+    last = now;
+    const k = reduce.matches || !SMOOTHING ? 1 : 1 - Math.exp(-dt / SMOOTHING);
+    shown += (target - shown) * k;
+    if (Math.abs(target - shown) < 0.0005) shown = target;
+    render();
+    raf = shown === target ? 0 : requestAnimationFrame(tick);
+  }
+
+  function setOnFilm(on) {
+    bar.classList.toggle('is-on-film', on);
+    hud.classList.toggle('is-on-film', on);
+  }
+
+  function render() {
+    const wipe = easeInOut(shown);
+    section.style.setProperty('--wipe', wipe.toFixed(4));
+    stage.classList.toggle('is-wiping', wipe > 0.003 && wipe < 0.997);
+    const percent = three(wipe * 100);
+    $('hud-reveal').textContent = percent;
+    $('edge-reveal').textContent = percent;
+
+    const gone = scrollY > roomBottom - innerHeight * 0.5;   // the stage has mostly scrolled away
+    const want = wipe >= START_AT && !gone;
+    if (want && !inRoom) {
+      inRoom = true;
+      // from above: start at the first frame. Back up from below: carry on where it stopped.
+      if (!leftBelow || !film.ended) play(!leftBelow);
+    } else if (!want && inRoom) {
+      inRoom = false;
+      leftBelow = gone;
+      film.pause();
+    }
+    setOnFilm(wipe > 0.985 && scrollY < roomBottom - innerHeight);
+  }
+
+  /* ---------- film events ---------- */
+  function showRuntime() {
+    if (isFinite(film.duration)) $('runtime').textContent = `${two(film.duration / 60)}:${two(film.duration % 60)}`;
+  }
+  function stamp() {
+    const t = film.currentTime;
+    timecode.textContent = `${two(t / 3600)}:${two((t / 60) % 60)}:${two(t % 60)}:${two((t % 1) * FPS)}`;
+  }
+  const filmState = (word) => { $('hud-film').textContent = word; };
+  film.addEventListener('loadedmetadata', showRuntime);
+  film.addEventListener('loadeddata', () => { $('empty').hidden = true; });
+  film.addEventListener('play', () => { stage.classList.add('is-playing'); filmState('Playing'); });
+  film.addEventListener('pause', () => { stage.classList.remove('is-playing'); if (!film.ended) filmState('Paused'); });
+  film.addEventListener('ended', () => { endCard.hidden = false; filmState('Ended'); });
+  film.addEventListener('seeked', stamp);
+  if (film.requestVideoFrameCallback) {
+    const everyFrame = () => { stamp(); film.requestVideoFrameCallback(everyFrame); };
+    film.requestVideoFrameCallback(everyFrame);
+  } else {
+    film.addEventListener('timeupdate', stamp);
+  }
+  if (film.readyState >= 1) showRuntime();
+  if (film.readyState >= 2) $('empty').hidden = true;
+
+  /* ---------- buttons ---------- */
+  function replay() {
+    film.pause();
+    film.currentTime = 0;
+    endCard.hidden = true;
+    const smooth = reduce.matches ? 'auto' : 'smooth';
+    if (pinned && !inRoom) scrollTo({ top: roomTop + span + 2, behavior: smooth }); // arriving starts it
+    else {
+      if (!pinned) stage.scrollIntoView({ block: 'center', behavior: smooth });
+      play(true);
+    }
+  }
+  document.querySelectorAll('[data-replay]').forEach((b) => b.addEventListener('click', replay));
+
+  // The big tap target: shown on phones, and anywhere a browser refuses to start the film by itself.
+  playBtn.addEventListener('click', async () => {
+    setSound(true);
+    const starting = play(film.ended);
+    if (!pinned) {
+      film.controls = true;
+      try {
+        const goFull = film.requestFullscreen || film.webkitEnterFullscreen;
+        const asked = goFull && goFull.call(film);
+        if (asked && asked.catch) asked.catch(() => {});
+      } catch { /* fullscreen is a bonus, not a requirement */ }
+    }
+    await starting;
+  });
+
+  // "Send to your Mac": opens the phone's share sheet, where AirDrop lives.
+  const shareStatus = $('share-status');
+  $('share').addEventListener('click', async () => {
+    const url = location.href;
+    if (navigator.share) {
+      try { await navigator.share({ title: document.title, url }); return; }
+      catch (err) { if (err.name === 'AbortError') return; }
+    }
+    try {
+      await navigator.clipboard.writeText(url);
+      shareStatus.textContent = 'Link copied. Send it to yourself and open it on your Mac.';
+    } catch {
+      shareStatus.textContent = url;
+    }
+  });
+
+  // Colour moods: the list matches the [data-mood] blocks in the CSS.
+  const MOODS = ['grass', 'signal', 'hud'];
+  let mood = 0;
+  $('mood').addEventListener('click', () => {
+    mood = (mood + 1) % MOODS.length;
+    if (mood) root.dataset.mood = MOODS[mood]; else delete root.dataset.mood;
+    $('mood-count').textContent = `${mood + 1}/${MOODS.length}`;
+  });
+
+  /* ---------- small behaviours ---------- */
+  // The clock in the corner is the viewer's own.
+  const clock = $('hud-clock');
+  const tock = () => { const d = new Date(); clock.textContent = `${two(d.getHours())}:${two(d.getMinutes())}:${two(d.getSeconds())}`; };
+  tock();
+  setInterval(tock, 1000);
+
+  // Hide the bar and readouts when the pointer rests on the playing film.
+  let idleTimer = 0;
+  function wake() {
+    root.classList.remove('is-idle');
+    clearTimeout(idleTimer);
+    idleTimer = setTimeout(() => root.classList.add('is-idle'), 2400);
+  }
+  for (const type of ['pointermove', 'pointerdown', 'keydown', 'focusin', 'wheel']) {
+    addEventListener(type, wake, { passive: true });
+  }
+  wake();
+
+  // Don't keep playing in a tab nobody is looking at.
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) film.pause();
+    else if (pinned && inRoom && !film.ended) play(false);
+  });
+
+  if ('IntersectionObserver' in window) {
+    // On phones, pause when the film scrolls off screen.
+    new IntersectionObserver(([entry]) => {
+      if (!pinned && !entry.isIntersecting && !document.fullscreenElement) film.pause();
+    }).observe(film);
+
+    // The note fades up as it arrives; it only waits if it starts below the first screen.
+    if (!reduce.matches) {
+      const seen = new IntersectionObserver((entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue;
+          entry.target.classList.remove('is-waiting');
+          seen.unobserve(entry.target);
+        }
+      }, { rootMargin: '0px 0px -14% 0px' });
+      for (const el of document.querySelectorAll('.fade')) {
+        if (el.getBoundingClientRect().top < innerHeight * 0.9) continue;
+        el.classList.add('is-waiting');
+        seen.observe(el);
+      }
+    }
+  }
+
+  addEventListener('scroll', onScroll, { passive: true });
+  addEventListener('resize', measure);
+  addEventListener('load', measure);
+  if (document.fonts && document.fonts.ready) document.fonts.ready.then(measure);
+  measure();
+})();
+</script>
+
+</body>
+</html>
